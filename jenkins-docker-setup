@@ -1,0 +1,311 @@
+####################
+# Jenkins Deployment 
+####################
+
+docker network create jenkins --attachable
+
+docker volume create jenkins
+
+###########################################################################################################################################################
+# docker run --name jenkins --network jenkins -w /var/jenkins_home -id -v jenkins:/var/jenkins_home -p 80:8080 --restart unless-stopped jenkins/jenkins:lts
+###########################################################################################################################################################
+
+###################################
+# Build docker images with jenkins
+###################################
+docker run --name jenkins --network jenkins -w /var/jenkins_home -id -v jenkins:/var/jenkins_home -p 80:8080 -v $(which docker):/usr/bin/docker -v /var/run/docker.sock:/var/run/docker.sock --restart unless-stopped jenkins/jenkins:lts
+
+echo "Waiting jenkins to launch on 80.."
+
+while ! nc -vz localhost 80; do
+  sleep 0.1 # wait for 1/10 of the second before check again
+done
+echo "Jenkins launched"
+
+# Jenkins User Permissions Set
+#####################################################################################
+docker exec -u root -it jenkins sh -c "chown -R jenkins:jenkins /var/run/docker.sock"
+#####################################################################################
+
+
+yes | docker image prune
+
+yes | docker container prune
+
+##################
+# BackUps Jenkins
+##################
+docker run --rm --volumes-from jenkins -v $(pwd):/backup busybox tar cvfz /backup/backup.tar /var/jenkins_home
+
+docker run --rm --volumes-from jenkins -v $(pwd):/backup busybox tar cvfz /backup/backup-$(date +'%d-%m-%Y-%T').tar /var/jenkins_home
+
+docker run --rm --volumes-from jenkins -v $(pwd):/backup busybox tar cvfz /backup/jenkins-backup-$(date +'%d-%m-%Y-%T').tar /var/jenkins_home
+
+##################
+# Restore Jenkins 
+##################
+
+
+docker exec -u root -it jenkins bash -c "rm -rf *"
+
+docker exec -u root -it jenkins ls 
+
+docker exec -u root -it jenkins pwd
+
+docker cp $PWD/backup.tar jenkins:/var/jenkins_home
+
+docker exec -u root -it jenkins ls 
+
+docker exec -u root -it jenkins tar -xzvf backup.tar
+
+docker exec -u root -it jenkins ls 
+
+docker exec -u root -it jenkins rm -f backup.tar
+
+docker exec -u root -it jenkins ls var/jenkins_home
+
+docker exec -u root -it jenkins bash -c "cd var/jenkins_home && mv * /var/jenkins_home"
+
+docker exec -u root -it jenkins bash -c "rm -rf var"
+
+docker exec -u root -it jenkins ls 
+
+docker restart jenkins
+
+#################
+# Single Command
+#################
+
+docker exec -u root -it jenkins bash -c "rm -rf *" && docker cp $PWD/backup.tar jenkins:/var/jenkins_home && docker exec -u root -it jenkins bash -c "tar -xzvf backup.tar" && docker exec -u root -it jenkins bash -c "cd var/jenkins_home && mv * /var/jenkins_home" && docker exec -u root -it jenkins bash -c "rm -rf var" && docker restart jenkins
+
+
+# docker run --rm --volumes-from CONTAINER -v $(pwd):/backup busybox bash -c "cd CONTAINERPATH && tar xvf /backup/backup.tar --strip 1"
+
+
+
+
+
+########
+# Script
+########
+
+
+#!/bin/bash
+# Purpose: Jenkins Setup
+# OS AmazonLinux2 (kernel 5.10)
+# Maintainer DevOps Muhammad Asim
+
+#####################
+# Docker Installation
+#####################
+
+yum update -y
+yum install -y docker || amazon-linux-extras install docker -y
+
+yum install -y nc jq tmux
+systemctl start docker
+systemctl enable docker
+
+################################
+# Docker Compose v1 installation
+################################
+curl -L "https://github.com/docker/compose/releases/download/1.29.2/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose
+chmod +x /usr/local/bin/docker-compose
+ln -s /usr/local/bin/docker-compose /usr/bin/docker-compose
+docker-compose --version
+
+
+#################################
+# Docker Compose V2 Installation
+#################################
+#########################################################################################
+# 1 Run the following command to download the current stable release of Docker Compose
+#########################################################################################
+
+mkdir -p ~/.docker/cli-plugins/
+curl -SL https://github.com/docker/compose/releases/download/v2.0.1/docker-compose-linux-x86_64 -o ~/.docker/cli-plugins/docker-compose
+
+ ###############################################
+ # 2 Apply executable permissions to the binary
+ ###############################################
+
+chmod +x ~/.docker/cli-plugins/docker-compose
+
+##############################################
+# 3 Apply executable permissions to the binary
+##############################################
+
+docker compose version
+
+####################
+# Jenkins Deployment
+####################
+docker network create jenkins --attachable
+docker volume create jenkins
+
+##################################
+# Build docker images with jenkins
+##################################
+
+docker run --name jenkins --network jenkins -w /var/jenkins_home -id -v jenkins:/var/jenkins_home -p 80:8080 -v $(which docker):/usr/bin/docker -v /var/run/docker.sock:/var/run/docker.sock --restart unless-stopped jenkins/jenkins:lts
+
+echo "Waiting jenkins to launch on 80.."
+
+while ! nc -vz localhost 80; do
+
+  sleep 0.1 # wait for 1/10 of the second before check again
+
+done
+
+echo "Jenkins launched"
+
+docker exec -u root -it jenkins sh -c "chown -R jenkins:jenkins /var/run/docker.sock"
+
+
+#############################################################
+# S3 Automated Backups & Retention Set
+# Note: For Retention Period Please SET S3 Life Cycle Rules
+#############################################################
+
+#!/bin/bash
+# Aurthor: Muhammad Asim
+# Purpose: S3 Automated Backups for OS Windows/Linux
+# Set LifeCycle in S3 for backup retention
+
+export CONTAINER_NAME="jenkins"
+
+#############################
+# Daily Backup Jenkins at 5AM
+##############################
+docker run --rm --volumes-from ${CONTAINER_NAME} -v $(pwd):/backup busybox tar cvfz /backup/jenkins-backup-$(date +'%d-%m-%Y-%T').tar /var/jenkins_home
+
+
+# TAG For Retention
+# aws s3api create-bucket --bucket cloudgeeksca-cicd-artifacts --region us-east-1
+
+export BUCKET="cloudgeeksca-cicd-artifacts"
+
+export BACKUP=$(ls -lthr | grep -i jenkins-backups* | tail -n1 | awk '{print $9}')
+
+export BUCKET_PATH="s3://cloudgeeksca-cicd-artifacts/jenkins-backups/$BACKUP"
+
+export KEY="jenkins-backups/${BACKUP}"
+
+
+##############
+# Upload to s3
+##############
+
+if [[ "$BACKUP" == "$BACKUP" ]]
+then
+echo "starting upload "$BACKUP" to s3 bucket "$BUCKET_PATH" at $(date +'%d-%m-%Y-%T')"
+aws s3 cp "$BACKUP" "$BUCKET_PATH"
+echo "finished uploading "$BACKUP" to "$BUCKET_PATH" "
+else
+echo "Backup failed"
+fi
+
+
+# ##########
+# Taggging
+# ##########
+aws s3api put-object-tagging --bucket "$BUCKET" --key "$KEY" --tagging '{"TagSet": [{ "Key": "retention", "Value": "10" }]}'
+
+echo "Clean Up"
+rm -rf $BACKUP
+
+
+
+# https://aws.amazon.com/premiumsupport/knowledge-center/cron-job-elastic-beanstalk/
+cat << EOF > /etc/cron.d/jenkins-backups
+files:
+    "/etc/cron.d/jenkins-backups":
+        mode: "000644"
+        owner: root
+        group: root
+        content: |
+            * 5 * * * root chmod +x /root/jenkins-backup.sh && /root/jenkins-backup.sh
+
+
+EOF
+
+
+exit 0
+
+
+# End
+
+
+
+#############################################################
+# S3 Automated Backups & Retention Set
+# Note: For Retention Period Please SET S3 Life Cycle Rules
+#############################################################
+
+
+
+#!/bin/bash
+# Aurthor: Muhammad Asim
+# Purpose: S3 Automated Backups for OS Windows/Linux
+# Set LifeCycle in S3 for backup retention
+
+export CONTAINER_NAME="kuzzle-elasticsearch-dev"
+export CONTAINER_MOUNT_PATH="/usr/share/elasticsearch"
+
+########################################
+# Daily Backup elasticsearch-dev at 5AM
+########################################
+docker run --rm --volumes-from ${CONTAINER_NAME} -v $(pwd):/backup busybox tar cvfz /backup/${CONTAINER_NAME}-backup-$(date +'%d-%m-%Y-%T').tar "$CONTAINER_MOUNT_PATH"
+
+
+export BUCKET="cloudgeeks-backups"
+
+export BACKUP=$(ls -lthr | grep -i kuzzle-elasticsearch-dev-backup* | tail -n1 | awk '{print $9}')
+
+export BUCKET_PATH="s3://cloudgeeks-backups/elasticseach-dev/$BACKUP"
+
+export KEY="elasticseach-dev/${BACKUP}"           # Make sure to provide the Right S3 Key
+
+
+##############
+# Upload to s3
+##############
+
+if [[ "$BACKUP" == "$BACKUP" ]]
+then
+echo "starting upload "$BACKUP" to s3 bucket "$BUCKET_PATH" at $(date +'%d-%m-%Y-%T')"
+aws s3 cp "$BACKUP" "$BUCKET_PATH"
+echo "finished uploading "$BACKUP" to "$BUCKET_PATH" "
+else
+echo "Backup failed"
+fi
+
+
+# ##########
+# Taggging
+# ##########
+aws s3api put-object-tagging --bucket "$BUCKET" --key "$KEY" --tagging '{"TagSet": [{ "Key": "retention", "Value": "10" }]}'
+
+echo "Clean Up"
+rm -rf $BACKUP
+
+
+
+# https://aws.amazon.com/premiumsupport/knowledge-center/cron-job-elastic-beanstalk/
+cat << EOF > /etc/cron.d/elasticsearch-dev-backups
+files:
+    "/etc/cron.d/elasticsearch-dev-backups":
+        mode: "000644"
+        owner: root
+        group: root
+        content: |
+            0 5 * * * root chmod +x /root/elasticsearch-dev-backup.sh && /root/elasticsearch-dev-backup.sh
+
+
+EOF
+
+
+exit 0
+
+
+# End

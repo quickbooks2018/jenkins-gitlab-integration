@@ -1,0 +1,8 @@
+services:
+  #Nginx Service
+   webserver:
+     image: registry.gitlab.com/quickbooks2018/gitlab-integration-with-jenkins:latest
+     container_name: webserver
+     restart: unless-stopped
+     ports:
+       - "8080:80"
