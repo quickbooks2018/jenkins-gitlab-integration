@@ -45,6 +45,20 @@ pipeline {
              }
                
             }
+            
+            
+             stage('Deploying Application') {
+            steps {
+                sh '''
+                
+                ls
+                pwd
+                docker-compose up -d
+                
+                '''
+             }
+               
+            }      
 
         
     }
