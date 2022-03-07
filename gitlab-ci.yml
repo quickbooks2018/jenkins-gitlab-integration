@@ -1,0 +1,28 @@
+image: docker:19.03.1
+
+variables:
+    DOCKER_IMAGE: registry.gitlab.com/quickbooks2018/gitlab-integration-with-jenkins
+    DOCKERFILE_LOCATION: ./
+    DOCKER_VERSION: Docker-19.03.6-ce
+    DOCKER_TLS_CERTDIR: ""
+
+services:
+  - docker:19.03.1-dind
+
+stages:
+  - build
+
+
+###############
+#   Builds    #
+###############
+
+build-docker-latest:
+  stage: build
+  script:
+    - docker login -u jenkins -p $CI_BUILD_TOKEN registry.gitlab.com
+    - docker build -t $DOCKER_IMAGE:latest $DOCKERFILE_LOCATION
+    - docker push $DOCKER_IMAGE:latest
+  only:
+    - main
+
