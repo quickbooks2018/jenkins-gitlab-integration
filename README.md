@@ -1,5 +1,7 @@
 # Gitlab Integration With Jenkins
 
+##### CI with Gitlab & CD with Jenkins
+
 ```bash
 docker login registry.gitlab.com
 ```
