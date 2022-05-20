@@ -1,0 +1,34 @@
+
+pipeline {
+    environment {
+    registry         = "registry.gitlab.com"     
+  }
+    agent any
+   
+    stages {
+
+
+    stage('SCM Checkout') {
+    steps {
+
+        git branch: 'main', credentialsId: 'gitlab-integration-with-jenkins', url: 'git@gitlab.com:quickbooks2018/gitlab-integration-with-jenkins.git'
+        
+        }
+         }
+            
+        stage('Build & Deploy') {
+            steps {
+                sh '''
+                
+                ls
+                pwd
+                docker-compose --project-name app up -d --build
+                
+                '''
+             }
+               
+            }      
+
+        
+    }
+}

@@ -1,0 +1,18 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: cloudgeeks:latest
+    restart: unless-stopped
+    ports:
+    - "80:80"
+    # volumes:
+    #   - app:/usr/share/nginx/html
+    # # env_file:
+    #   - ./.env.dev
+
+
+# volumes:
+#   app:
+
